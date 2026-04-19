@@ -43,6 +43,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from datetime import datetime, timezone
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -182,7 +184,7 @@ def call_doctor(req: CallRequest) -> dict[str, Any]:
     if result.get("placed") and call_id:
         sb.table("doctor_calls").update({
             "status": "notified",
-            "scheduled_at": "now()",
+            "scheduled_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", call_id).execute()
 
     return {
