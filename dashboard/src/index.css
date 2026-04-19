@@ -328,6 +328,35 @@ body {
 .flag-badge--watch    { background: var(--watch-bg);    color: var(--watch-text); }
 .flag-badge--stable   { background: var(--stable-bg);   color: var(--stable-text); }
 
+/* NEWS2 badge */
+.pcard-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.news2-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.news2-badge--none   { background: var(--stable-bg);   color: var(--stable-text); }
+.news2-badge--low    { background: var(--watch-bg);     color: var(--watch-text); }
+.news2-badge--medium { background: var(--critical-bg);  color: var(--critical-text); }
+.news2-badge--high   { background: #7f1d1d;             color: #fecaca; }
+
+/* O₂ / ACVPU clinical tags */
+.clinical-tags { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.clinical-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.clinical-tag--o2    { background: #1e3a5f; color: #93c5fd; }
+.clinical-tag--acvpu { background: #3b1f5e; color: #d8b4fe; }
+
 .agent-badge {
   font-family: var(--text-mono);
   font-size: 9px;

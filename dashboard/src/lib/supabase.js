@@ -12,7 +12,7 @@ export async function fetchPatients() {
   const { data, error } = await supabase
     .from('patient_current_state')
     .select(`*, patients (id, room_number, full_name, date_of_birth, sex, primary_dx, attending_doc)`)
-    .order('flag', { ascending: true })
+    .order('news2_score', { ascending: false })
   if (error) throw error
   return data ?? []
 }
@@ -67,7 +67,7 @@ export async function acknowledgeFlag(patientId) {
   if (!supabase) return
   const { error } = await supabase
     .from('flags')
-    .update({ acknowledged: true, ack_at: new Date().toISOString() })
+    .update({ acknowledged: true, ack_by: 'Nurse', ack_at: new Date().toISOString() })
     .eq('patient_id', patientId)
     .eq('acknowledged', false)
   if (error) throw error

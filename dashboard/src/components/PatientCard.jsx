@@ -67,7 +67,8 @@ export default function PatientCard({ patient, onClick, onCallDoctor }) {
 
   const p = patient.patients
   const age = getAge(p.date_of_birth)
-  const { hr, bp_sys, bp_dia, spo2, temp_c, rr, flag, ai_note, last_updated } = patient
+  const { hr, bp_sys, bp_dia, spo2, temp_c, rr, flag, ai_note, last_updated,
+          news2_score, news2_risk, on_oxygen, consciousness } = patient
 
   async function handleAcknowledge(e) {
     e.stopPropagation()
@@ -115,7 +116,14 @@ export default function PatientCard({ patient, onClick, onCallDoctor }) {
           <span className="pcard-sep"> · </span>
           <span>{p.primary_dx}</span>
         </div>
-        <FlagBadge flag={flag} />
+        <div className="pcard-badges">
+          {news2_score != null && (
+            <span className={`news2-badge news2-badge--${news2_risk ?? 'none'}`}>
+              NEWS2 {news2_score}
+            </span>
+          )}
+          <FlagBadge flag={flag} />
+        </div>
       </div>
 
       <div className="vitals-row">
@@ -127,6 +135,15 @@ export default function PatientCard({ patient, onClick, onCallDoctor }) {
           <VitalCell category="RR" value={rr} unit="/min" hi={rr > 25} lo={rr < 10} />
         )}
       </div>
+
+      {(on_oxygen || (consciousness && consciousness !== 'A')) && (
+        <div className="clinical-tags">
+          {on_oxygen && <span className="clinical-tag clinical-tag--o2">O₂ supplemental</span>}
+          {consciousness && consciousness !== 'A' && (
+            <span className="clinical-tag clinical-tag--acvpu">ACVPU: {consciousness}</span>
+          )}
+        </div>
+      )}
 
       <Sparkline flag={flag} />
 
