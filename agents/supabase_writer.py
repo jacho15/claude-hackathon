@@ -126,6 +126,25 @@ def _should_open_doctor_call(patient_id: str, flag: str, prev: Optional[str]) ->
     return True
 
 
+# --- session reset ----------------------------------------------------------
+
+def clear_session_data() -> None:
+    """Delete all doctor_calls and unacknowledged flags from previous sessions."""
+    client = _get_client()
+    if client is None:
+        return
+    try:
+        client.table("doctor_calls").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+        logger.info("Cleared doctor_calls for new session.")
+    except Exception as exc:
+        logger.warning("Failed to clear doctor_calls: %s", exc)
+    try:
+        client.table("flags").delete().eq("acknowledged", False).execute()
+        logger.info("Cleared unacknowledged flags for new session.")
+    except Exception as exc:
+        logger.warning("Failed to clear flags: %s", exc)
+
+
 # --- public write API -------------------------------------------------------
 
 def _attending_doctor(patient_id: str) -> str:

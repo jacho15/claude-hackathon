@@ -100,6 +100,11 @@ async def announce(ctx: Context) -> None:
     ctx.logger.info("Export this address so the patient agents can reach you:")
     ctx.logger.info(f"  export FLOOR_AGENT_ADDRESS={floor_agent.address}")
     ctx.logger.info("=" * 72)
+    try:
+        from .supabase_writer import clear_session_data
+        clear_session_data()
+    except Exception:
+        pass
 
 
 @floor_agent.on_message(model=VitalsUpdate, replies=VitalsAck)
