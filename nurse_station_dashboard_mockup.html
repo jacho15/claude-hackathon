@@ -1,0 +1,166 @@
+
+<style>
+  .db { padding: 1rem 0; font-size: 13px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .floor-label { font-size: 15px; font-weight: 500; color: var(--color-text-primary); }
+  .floor-meta { font-size: 12px; color: var(--color-text-tertiary); }
+  .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .scard { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; }
+  .scard-label { font-size: 11px; color: var(--color-text-tertiary); margin-bottom: 4px; }
+  .scard-val { font-size: 22px; font-weight: 500; color: var(--color-text-primary); }
+  .scard-val.danger { color: var(--color-text-danger); }
+  .scard-val.warn { color: var(--color-text-warning); }
+  .scard-val.ok { color: var(--color-text-success); }
+  .patients-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
+  .pcard { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 12px 14px; cursor: pointer; transition: border-color 0.15s; }
+  .pcard:hover { border-color: var(--color-border-primary); }
+  .pcard.critical { border-left: 3px solid var(--color-border-danger); border-radius: 0; border-radius: var(--border-radius-lg); }
+  .pcard.watch { border-left: 3px solid var(--color-border-warning); border-radius: var(--border-radius-lg); }
+  .pcard.stable { border-left: 3px solid var(--color-border-success); border-radius: var(--border-radius-lg); }
+  .pcard-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .pcard-name { font-weight: 500; font-size: 13px; color: var(--color-text-primary); }
+  .pcard-room { font-size: 11px; color: var(--color-text-tertiary); margin-top: 1px; }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+  .badge.critical { background: var(--color-background-danger); color: var(--color-text-danger); }
+  .badge.watch { background: var(--color-background-warning); color: var(--color-text-warning); }
+  .badge.stable { background: var(--color-background-success); color: var(--color-text-success); }
+  .vitals-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+  .vital { background: var(--color-background-secondary); border-radius: 6px; padding: 5px 8px; }
+  .vital-label { font-size: 10px; color: var(--color-text-tertiary); }
+  .vital-val { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+  .vital-val.hi { color: var(--color-text-danger); }
+  .vital-val.lo { color: var(--color-text-warning); }
+  .ai-note { font-size: 11px; color: var(--color-text-secondary); background: var(--color-background-info); border-radius: 6px; padding: 5px 8px; margin-top: 6px; }
+  .ai-note strong { color: var(--color-text-info); font-weight: 500; }
+  .flag-action { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .flag-action button { font-size: 11px; padding: 3px 10px; }
+  .section-label { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .queue { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 10px 14px; }
+  .queue-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .queue-item:last-child { border-bottom: none; }
+  .qi-left { font-size: 12px; color: var(--color-text-primary); }
+  .qi-time { font-size: 11px; color: var(--color-text-tertiary); }
+  .qi-doc { font-size: 11px; color: var(--color-text-secondary); }
+  .mini-bar { height: 3px; background: var(--color-background-secondary); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .mini-fill { height: 100%; border-radius: 2px; }
+</style>
+
+<div class="db">
+  <h2 class="sr-only">Nurse station dashboard for Floor 3 West</h2>
+  <div class="topbar">
+    <div>
+      <div class="floor-label">Floor 3 West — Nurse station</div>
+      <div class="floor-meta">Head nurse: A. Torres &nbsp;·&nbsp; 08 patients &nbsp;·&nbsp; Last sync: just now</div>
+    </div>
+    <button onclick="sendPrompt('How would the real-time sync between patient agents and the dashboard work technically?')">How sync works ↗</button>
+  </div>
+
+  <div class="summary-row">
+    <div class="scard"><div class="scard-label">Critical flags</div><div class="scard-val danger">2</div></div>
+    <div class="scard"><div class="scard-label">Watch flags</div><div class="scard-val warn">3</div></div>
+    <div class="scard"><div class="scard-label">Stable patients</div><div class="scard-val ok">3</div></div>
+    <div class="scard"><div class="scard-label">Pending doctor calls</div><div class="scard-val">4</div></div>
+  </div>
+
+  <div class="section-label">Patients — sorted by priority</div>
+  <div class="patients-grid">
+
+    <!-- Patient 1: Critical -->
+    <div class="pcard critical" onclick="sendPrompt('What detailed view should open when a nurse clicks on a patient card?')">
+      <div class="pcard-header">
+        <div><div class="pcard-name">Maria Gonzalez</div><div class="pcard-room">Room 301 · 67F · post-op</div></div>
+        <span class="badge critical">Critical</span>
+      </div>
+      <div class="vitals-row">
+        <div class="vital"><div class="vital-label">HR</div><div class="vital-val hi">128 bpm</div></div>
+        <div class="vital"><div class="vital-label">BP</div><div class="vital-val hi">158/94</div></div>
+        <div class="vital"><div class="vital-label">SpO₂</div><div class="vital-val">97%</div></div>
+        <div class="vital"><div class="vital-label">Temp</div><div class="vital-val hi">38.9°C</div></div>
+      </div>
+      <div class="mini-bar"><div class="mini-fill" style="width:85%;background:var(--color-background-danger)"></div></div>
+      <div class="ai-note"><strong>Agent:</strong> HR elevated 22 min, trending up. BP above threshold. Possible sepsis onset. → Call attending.</div>
+      <div class="flag-action">
+        <button onclick="event.stopPropagation();sendPrompt('Draft a doctor alert message for Maria Gonzalez with elevated HR, BP and possible sepsis')">Call doctor ↗</button>
+        <button onclick="event.stopPropagation()">Acknowledge</button>
+      </div>
+    </div>
+
+    <!-- Patient 2: Critical -->
+    <div class="pcard critical" onclick="sendPrompt('What detailed view should open when a nurse clicks on a patient card?')">
+      <div class="pcard-header">
+        <div><div class="pcard-name">James Okafor</div><div class="pcard-room">Room 305 · 54M · cardiac obs</div></div>
+        <span class="badge critical">Critical</span>
+      </div>
+      <div class="vitals-row">
+        <div class="vital"><div class="vital-label">HR</div><div class="vital-val hi">44 bpm</div></div>
+        <div class="vital"><div class="vital-label">BP</div><div class="vital-val">110/70</div></div>
+        <div class="vital"><div class="vital-label">SpO₂</div><div class="vital-val lo">91%</div></div>
+        <div class="vital"><div class="vital-label">Temp</div><div class="vital-val">36.8°C</div></div>
+      </div>
+      <div class="mini-bar"><div class="mini-fill" style="width:78%;background:var(--color-background-danger)"></div></div>
+      <div class="ai-note"><strong>Agent:</strong> Bradycardia detected. SpO₂ dropped 4pt in 8 min. ECG shows irregular pattern. → Immediate review.</div>
+      <div class="flag-action">
+        <button onclick="event.stopPropagation();sendPrompt('Draft an urgent doctor alert for James Okafor with bradycardia and dropping SpO2')">Call doctor ↗</button>
+        <button onclick="event.stopPropagation()">Acknowledge</button>
+      </div>
+    </div>
+
+    <!-- Patient 3: Watch -->
+    <div class="pcard watch">
+      <div class="pcard-header">
+        <div><div class="pcard-name">Lin Yao</div><div class="pcard-room">Room 302 · 41F · pneumonia</div></div>
+        <span class="badge watch">Watch</span>
+      </div>
+      <div class="vitals-row">
+        <div class="vital"><div class="vital-label">HR</div><div class="vital-val">88 bpm</div></div>
+        <div class="vital"><div class="vital-label">BP</div><div class="vital-val">122/78</div></div>
+        <div class="vital"><div class="vital-label">SpO₂</div><div class="vital-val lo">93%</div></div>
+        <div class="vital"><div class="vital-label">Temp</div><div class="vital-val lo">37.9°C</div></div>
+      </div>
+      <div class="mini-bar"><div class="mini-fill" style="width:50%;background:var(--color-background-warning)"></div></div>
+      <div class="ai-note"><strong>Agent:</strong> SpO₂ borderline. Temp mildly elevated. Stable trend for 40 min. Continue monitoring.</div>
+    </div>
+
+    <!-- Patient 4: Stable -->
+    <div class="pcard stable">
+      <div class="pcard-header">
+        <div><div class="pcard-name">David Mehta</div><div class="pcard-room">Room 303 · 29M · appendectomy</div></div>
+        <span class="badge stable">Stable</span>
+      </div>
+      <div class="vitals-row">
+        <div class="vital"><div class="vital-label">HR</div><div class="vital-val">72 bpm</div></div>
+        <div class="vital"><div class="vital-label">BP</div><div class="vital-val">118/74</div></div>
+        <div class="vital"><div class="vital-label">SpO₂</div><div class="vital-val">99%</div></div>
+        <div class="vital"><div class="vital-label">Temp</div><div class="vital-val">36.6°C</div></div>
+      </div>
+      <div class="mini-bar"><div class="mini-fill" style="width:20%;background:var(--color-background-success)"></div></div>
+      <div class="ai-note"><strong>Agent:</strong> All vitals within range for 3h. Next medication: amoxicillin at 14:30.</div>
+    </div>
+
+  </div>
+
+  <div class="section-label">Doctor call queue</div>
+  <div class="queue">
+    <div class="queue-item">
+      <div><div class="qi-left">Maria Gonzalez · Room 301</div><div class="qi-doc">Dr. Patel (attending)</div></div>
+      <div style="text-align:right"><div class="badge critical">Urgent</div><div class="qi-time" style="margin-top:4px">Waiting 3 min</div></div>
+    </div>
+    <div class="queue-item">
+      <div><div class="qi-left">James Okafor · Room 305</div><div class="qi-doc">Dr. Reyes (cardiology)</div></div>
+      <div style="text-align:right"><div class="badge critical">Urgent</div><div class="qi-time" style="margin-top:4px">Waiting 1 min</div></div>
+    </div>
+    <div class="queue-item">
+      <div><div class="qi-left">Lin Yao · Room 302</div><div class="qi-doc">Dr. Patel (attending)</div></div>
+      <div style="text-align:right"><div class="badge watch">Routine</div><div class="qi-time" style="margin-top:4px">Scheduled 14:00</div></div>
+    </div>
+    <div class="queue-item">
+      <div><div class="qi-left">David Mehta · Room 303</div><div class="qi-doc">Dr. Singh (surgical)</div></div>
+      <div style="text-align:right"><div class="badge stable">Follow-up</div><div class="qi-time" style="margin-top:4px">Scheduled 15:30</div></div>
+    </div>
+  </div>
+
+  <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+    <button onclick="sendPrompt('What should the patient detail modal show when a nurse clicks into a specific patient?')">Patient detail view ↗</button>
+    <button onclick="sendPrompt('How do I build this dashboard with Fetch.AI AgentVerse? Give me a technical implementation plan.')">Build this ↗</button>
+  </div>
+</div>
