@@ -1,8 +1,26 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import FlagBadge from './FlagBadge'
-import { acknowledgeFlag, callDoctor } from '../lib/supabase'
+import { acknowledgeFlag, callDoctor, fetchPatientTrend } from '../lib/supabase'
 
 const SPARK_COLOR = { critical: '#EF4444', watch: '#F59E0B', stable: '#22C55E' }
+
+const FALLBACK_TREND = {
+  critical: [30, 45, 50, 55, 65, 72, 80, 90],
+  watch:    [40, 42, 45, 43, 50, 48, 52, 55],
+  stable:   [50, 48, 52, 49, 51, 50, 48, 50],
+}
+
+function formatWindow(rows) {
+  if (!rows?.length) return 'no history'
+  const first = new Date(rows[0].recorded_at).getTime()
+  const last = new Date(rows[rows.length - 1].recorded_at).getTime()
+  const secs = Math.max(1, Math.round((last - first) / 1000))
+  if (secs < 90) return `${secs}s`
+  const mins = Math.round(secs / 60)
+  if (mins < 90) return `${mins}m`
+  const hrs = Math.round(mins / 60)
+  return `${hrs}h`
+}
 
 function getAge(dob) {
   if (!dob) return '—'
@@ -26,12 +44,35 @@ function VitalCell({ category, value, unit, hi, lo }) {
   )
 }
 
-function Sparkline({ flag }) {
-  const raw = {
-    critical: [30, 45, 50, 55, 65, 72, 80, 90],
-    watch:    [40, 42, 45, 43, 50, 48, 52, 55],
-    stable:   [50, 48, 52, 49, 51, 50, 48, 50],
-  }[flag] ?? [50, 50, 50, 50, 50, 50, 50, 50]
+/**
+ * Sparkline fed from real `vitals_readings` rows.
+ *
+ * We re-query on mount and whenever `lastUpdated` changes — that prop is the
+ * `patient_current_state.last_updated` timestamp, which ticks every time the
+ * Floor Aggregator writes new vitals. (We can't subscribe directly to
+ * vitals_readings because it isn't in the supabase_realtime publication.)
+ *
+ * Falls back to a flag-keyed demo array if the table is empty, so brand-new
+ * patients still render something instead of a flat line.
+ */
+function Sparkline({ patientId, lastUpdated, flag }) {
+  const [rows, setRows] = useState(null)
+
+  useEffect(() => {
+    if (!patientId) return
+    let cancelled = false
+    fetchPatientTrend(patientId, 20)
+      .then(r => { if (!cancelled) setRows(r) })
+      .catch(() => { if (!cancelled) setRows([]) })
+    return () => { cancelled = true }
+  }, [patientId, lastUpdated])
+
+  const hrSeries = (rows ?? [])
+    .map(r => Number(r.hr))
+    .filter(v => Number.isFinite(v))
+
+  const haveReal = hrSeries.length >= 2
+  const raw = haveReal ? hrSeries : (FALLBACK_TREND[flag] ?? [50, 50, 50, 50, 50, 50, 50, 50])
 
   const W = 100, H = 24, pad = 2
   const max = Math.max(...raw), min = Math.min(...raw), range = max - min || 1
@@ -40,6 +81,10 @@ function Sparkline({ flag }) {
     const y = H - pad - ((v - min) / range) * (H - pad * 2)
     return `${x},${y}`
   }).join(' ')
+
+  const label = haveReal
+    ? `HR · last ${formatWindow(rows)}`
+    : rows === null ? 'loading…' : 'no history yet'
 
   return (
     <div className="sparkline-wrap">
@@ -51,10 +96,11 @@ function Sparkline({ flag }) {
           strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"
-          opacity="0.7"
+          opacity={haveReal ? 0.9 : 0.35}
+          strokeDasharray={haveReal ? undefined : '2 2'}
         />
       </svg>
-      <span className="sparkline-label">Last 60m</span>
+      <span className="sparkline-label">{label}</span>
     </div>
   )
 }
@@ -82,12 +128,28 @@ export default function PatientCard({ patient, onClick, onCallDoctor }) {
 
   async function handleCallDoctor(e) {
     e.stopPropagation()
+
+    const defaultMsg = ai_note?.slice(0, 160) ?? `${flag} vitals, please review.`
+    // Single-line inline prompt: Enter sends, Cancel uses the default.
+    const custom = window.prompt(
+      `Calling ${p.attending_doc} for Room ${p.room_number}.\n` +
+      `Optional: add a short message the doctor will hear.\n` +
+      `(Leave as-is and press OK to use the current AI note.)`,
+      defaultMsg,
+    )
+    if (custom === null) {
+      // nurse clicked Cancel — abort, no call placed.
+      return
+    }
+
     setCalling(true)
+    const message = custom.trim() || defaultMsg
     const newCall = {
       patientId: patient.patient_id,
       doctorName: p.attending_doc,
       specialty: 'attending',
-      reason: ai_note?.slice(0, 80) ?? 'Critical vitals',
+      reason: message,
+      customMessage: message,
       urgency: 'urgent',
     }
     try {
@@ -145,7 +207,11 @@ export default function PatientCard({ patient, onClick, onCallDoctor }) {
         </div>
       )}
 
-      <Sparkline flag={flag} />
+      <Sparkline
+        patientId={patient.patient_id}
+        lastUpdated={last_updated}
+        flag={flag}
+      />
 
       <div className="ai-note">
         <span className="ai-note-icon">✦</span>
