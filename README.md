@@ -51,6 +51,8 @@ Nurses managing 8–15 patients simultaneously rely on periodic manual checks an
 └─────────────────────────────────────────────────────────┘
 ```
 
+![Patient Agent Architecture](patient_agent_architecture.svg)
+
 ### Agent Communication (Fetch.AI uAgents)
 
 - Each **Patient Agent** runs on `@agent.on_interval(period=10.0)` — polling every 10 seconds.
