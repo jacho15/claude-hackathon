@@ -1,7 +1,7 @@
 # Nucleus — Autonomous Hospital Operating System
 
 > Hackathon project · originally 5 hours / 4 people · now positioned as a multi-phase build  
-> Stack: **Fetch.ai uAgents** · **Anthropic Claude (Sonnet)** · **Supabase** (Postgres + Realtime) · **React + Vite** dashboard · Afterquery-style analytics layer
+> Stack: **Fetch.ai uAgents** · **Anthropic Claude (Sonnet)** · **Supabase** (Postgres + Realtime) · **React + Vite** dashboard · Claude-generated operational reports over Supabase SQL
 
 ---
 
@@ -11,13 +11,13 @@ Hospitals are extraordinary at medicine and shockingly inefficient at coordinati
 
 **Nucleus is an AI brain for the entire hospital** — not replacing doctors, but handling every operational decision that currently falls through the cracks or wastes human time.
 
-| Today | With Nucleus |
-|---|---|
-| Bed turnover from discharge to ready-for-admit: **3–4 hours** | Cleaning queued automatically the moment discharge is logged: **30–60 min** |
-| Critical lab result paged manually after a delay | Lab Agent flags the value, Claude summarizes it, the right specialist is notified within seconds |
-| Pharmacy stockouts discovered when a nurse pulls an empty drawer | Pharmacy Agent forecasts depletion days in advance, auto-orders within budget |
-| Shift handover = 40 chart notes per patient, read at 2 am | Claude generates a 5-bullet handoff per patient, ranked by what changed |
-| ER triage by gut-feel, beds allocated by phone calls | Triage Agent scores severity, negotiates with Bed Agent, patient flows in under an hour |
+| Today                                                            | With Nucleus                                                                                     |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Bed turnover from discharge to ready-for-admit: **3–4 hours**    | Cleaning queued automatically the moment discharge is logged: **30–60 min**                      |
+| Critical lab result paged manually after a delay                 | Lab Agent flags the value, Claude summarizes it, the right specialist is notified within seconds |
+| Pharmacy stockouts discovered when a nurse pulls an empty drawer | Pharmacy Agent forecasts depletion days in advance, auto-orders within budget                    |
+| Shift handover = 40 chart notes per patient, read at 2 am        | Claude generates a 5-bullet handoff per patient, ranked by what changed                          |
+| ER triage by gut-feel, beds allocated by phone calls             | Triage Agent scores severity, negotiates with Bed Agent, patient flows in under an hour          |
 
 None of these are medical decisions. They are **coordination and data problems** — exactly what an autonomous-agent architecture solves.
 
@@ -27,17 +27,17 @@ None of these are medical decisions. They are **coordination and data problems**
 
 Each department gets a dedicated autonomous agent that observes its slice of the hospital, acts on it, and **negotiates with sibling agents** over Fetch.ai's messaging fabric. Claude is the reasoning core that any agent can consult when a situation is too novel for rule-based logic.
 
-| Agent | Owns | Primary inputs | Auto-actions |
-|---|---|---|---|
-| 🛏 **Bed Agent** | Floor-by-floor bed inventory | EHR admit/discharge, Facilities ready-flag | Suggests transfers, holds beds for inbound ER cases |
-| 🧑‍⚕ **Staff Agent** | Nurse / doctor workload by shift | Assignment data, NEWS2 burden per nurse | Reallocates patients during surges, flags burnout risk |
-| 🚑 **ER Triage Agent** | Incoming patient queue | Vitals at intake, presenting complaint | Scores urgency, books beds via Bed Agent |
-| 💊 **Pharmacy Agent** | Drug inventory + reorder | Dispense events, supplier lead times | Forecasts stockout, places orders within budget |
-| 🧪 **Lab Agent** | Pending tests + result delivery | LIS feed, reference ranges | Flags critical values, pages the right clinician via Claude summary |
-| 🧹 **Facilities Agent** | Room status + cleaning crew | Discharge events, EVS roster | Auto-dispatches cleaning, reports ready-for-admit |
-| 📋 **Discharge Agent** | Patients ready to leave | Vitals trend, attending sign-off, transport | Coordinates paperwork, transport, follow-up booking |
-| 🩺 **Patient Vitals Agent** *(× N rooms)* | One per patient room | Bedside monitor / mock stream | Computes NEWS2, raises clinical flags — **shipped in Phase 1** |
-| 🏛 **Floor Aggregator Agent** *(× N floors)* | Roll-up for one ward | All Patient Vitals Agents on the floor | Persists state, opens doctor calls — **shipped in Phase 1** |
+| Agent                                        | Owns                             | Primary inputs                              | Auto-actions                                                        |
+| -------------------------------------------- | -------------------------------- | ------------------------------------------- | ------------------------------------------------------------------- |
+| 🛏 **Bed Agent**                             | Floor-by-floor bed inventory     | EHR admit/discharge, Facilities ready-flag  | Suggests transfers, holds beds for inbound ER cases                 |
+| 🧑‍⚕ **Staff Agent**                           | Nurse / doctor workload by shift | Assignment data, NEWS2 burden per nurse     | Reallocates patients during surges, flags burnout risk              |
+| 🚑 **ER Triage Agent**                       | Incoming patient queue           | Vitals at intake, presenting complaint      | Scores urgency, books beds via Bed Agent                            |
+| 💊 **Pharmacy Agent**                        | Drug inventory + reorder         | Dispense events, supplier lead times        | Forecasts stockout, places orders within budget                     |
+| 🧪 **Lab Agent**                             | Pending tests + result delivery  | LIS feed, reference ranges                  | Flags critical values, pages the right clinician via Claude summary |
+| 🧹 **Facilities Agent**                      | Room status + cleaning crew      | Discharge events, EVS roster                | Auto-dispatches cleaning, reports ready-for-admit                   |
+| 📋 **Discharge Agent**                       | Patients ready to leave          | Vitals trend, attending sign-off, transport | Coordinates paperwork, transport, follow-up booking                 |
+| 🩺 **Patient Vitals Agent** _(× N rooms)_    | One per patient room             | Bedside monitor / mock stream               | Computes NEWS2, raises clinical flags — **shipped in Phase 1**      |
+| 🏛 **Floor Aggregator Agent** _(× N floors)_ | Roll-up for one ward             | All Patient Vitals Agents on the floor      | Persists state, opens doctor calls — **shipped in Phase 1**         |
 
 > ✅ The two **bold-italicised rows** are live and verified in the current codebase. Everything else is roadmapped — the architecture is identical, only the data sources change.
 
@@ -61,22 +61,22 @@ This chain currently takes hours of phone calls, sticky notes, and pages. Nucleu
 
 Claude is not a chatbot bolted on the side. It is the **reasoning surface** that every agent calls into when rules aren't enough.
 
-| Use case | Caller | Output |
-|---|---|---|
-| **Clinical notes per patient** *(shipped)* | Patient Vitals Agent | 1–2 sentence note with suggested action |
-| **Shift handoff briefings** | Staff Agent | Per-patient 5-bullet summary, ranked by what changed since last shift |
-| **Discharge summaries in plain language** | Discharge Agent | Patient-readable + caregiver-readable + GP-readable versions |
-| **Natural-language query over hospital state** | Dashboard | "Which patients on Ward 3 are likely ready for discharge today?" |
-| **Critical-value escalation reports** | Lab Agent | Result + clinical context + suggested specialist + draft page text |
-| **Multilingual patient communication** | Discharge Agent | Procedure / consent / aftercare in patient's language |
-| **Incident / root-cause reports** | Any agent on failure | Timeline + contributing factors + recommended changes |
-| **Ethical triage support during scarcity** | ER Triage Agent → human | Frames the decision criteria; never decides |
+| Use case                                       | Caller                  | Output                                                                |
+| ---------------------------------------------- | ----------------------- | --------------------------------------------------------------------- |
+| **Clinical notes per patient** _(shipped)_     | Patient Vitals Agent    | 1–2 sentence note with suggested action                               |
+| **Shift handoff briefings**                    | Staff Agent             | Per-patient 5-bullet summary, ranked by what changed since last shift |
+| **Discharge summaries in plain language**      | Discharge Agent         | Patient-readable + caregiver-readable + GP-readable versions          |
+| **Natural-language query over hospital state** | Dashboard               | "Which patients on Ward 3 are likely ready for discharge today?"      |
+| **Critical-value escalation reports**          | Lab Agent               | Result + clinical context + suggested specialist + draft page text    |
+| **Multilingual patient communication**         | Discharge Agent         | Procedure / consent / aftercare in patient's language                 |
+| **Incident / root-cause reports**              | Any agent on failure    | Timeline + contributing factors + recommended changes                 |
+| **Ethical triage support during scarcity**     | ER Triage Agent → human | Frames the decision criteria; never decides                           |
 
 A hard architectural rule: **Claude supports clinical judgment, it never replaces it.** Operations are automated; medicine is delegated to humans with better context.
 
 ---
 
-## 4. The Command Center (Afterquery-style)
+## 4. The Command Center
 
 A single dashboard that hospital administrators have never had — every agent's state, ranked and queryable, in one place.
 
@@ -84,9 +84,9 @@ A single dashboard that hospital administrators have never had — every agent's
 - **Staff load distribution** — who's overwhelmed right now (NEWS2 burden per nurse)
 - **ER wait-time trends** vs. predicted surge times
 - **Medication stock** with reorder forecasts
-- **Discharge bottleneck tracker** — patients stuck and *why*
-- **Live patient grid** *(shipped)* — Phase 1 nurse station view
-- **Doctor call queue** *(shipped)* — open, in-progress, completed
+- **Discharge bottleneck tracker** — patients stuck and _why_
+- **Live patient grid** _(shipped)_ — Phase 1 nurse station view
+- **Doctor call queue** _(shipped)_ — open, in-progress, completed
 - **Auto-generated weekly / monthly reports** written by Claude from the operational dataset
 - **Natural-language query box** — "show me patients whose NEWS2 has risen by 2 in the last hour"
 
@@ -104,7 +104,7 @@ The story we want to tell on stage. The bold steps are running today.
 >
 > 🧹 14:30 — **Facilities Agent** receives the auto-cleaning request, dispatches EVS.
 >
-> ✅ 15:05 — Bed marked ready. **Bed Agent** confirms reservation. ER patient moves up. *(In a status-quo hospital, this would be the 4-hour mark and the patient would still be in the ER hallway.)*
+> ✅ 15:05 — Bed marked ready. **Bed Agent** confirms reservation. ER patient moves up. _(In a status-quo hospital, this would be the 4-hour mark and the patient would still be in the ER hallway.)_
 >
 > 🩺 15:18 — Patient is now in Room 305. **Patient Vitals Agent for Room 305** boots, polls the monitor every 10 s. **NEWS2 = 7 (high)** on first reading because of supplemental O₂ + tachycardia.
 >
@@ -156,19 +156,19 @@ The current codebase ships the two **most safety-critical** agents in the ecosys
 
 ### 6.2 What is verified live today
 
-| Capability | Status |
-|---|---|
-| 4 Patient Vitals Agents + 1 Floor Aggregator running in one process | ✅ verified |
-| Mock vitals stream with 5 named clinical scenarios | ✅ |
-| **NEWS2 (RCP 2017)** scoring with O₂ + ACVPU per-room overrides | ✅ |
-| Inter-agent messaging via Fetch.ai uAgents `Bureau` | ✅ |
-| Supabase persistence (patient_current_state, vitals_readings, flags, doctor_calls) | ✅ code-complete; pending project + creds |
-| Claude clinical-note generator with per-patient cache | ✅ code-complete; activates on `ANTHROPIC_API_KEY` |
-| Doctor-call queue auto-opened on flag escalation | ✅ |
-| Graceful degrade when Supabase / Anthropic creds are absent | ✅ |
-| React dashboard subscribing to Supabase Realtime | ⏳ Person 3 |
-| Doctor-queue UI + acknowledge flow | ⏳ Person 4 |
-| Agentverse Mailbox registration (cross-machine) | ⏳ optional |
+| Capability                                                                         | Status                                             |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 4 Patient Vitals Agents + 1 Floor Aggregator running in one process                | ✅ verified                                        |
+| Mock vitals stream with 5 named clinical scenarios                                 | ✅                                                 |
+| **NEWS2 (RCP 2017)** scoring with O₂ + ACVPU per-room overrides                    | ✅                                                 |
+| Inter-agent messaging via Fetch.ai uAgents `Bureau`                                | ✅                                                 |
+| Supabase persistence (patient_current_state, vitals_readings, flags, doctor_calls) | ✅ code-complete; pending project + creds          |
+| Claude clinical-note generator with per-patient cache                              | ✅ code-complete; activates on `ANTHROPIC_API_KEY` |
+| Doctor-call queue auto-opened on flag escalation                                   | ✅                                                 |
+| Graceful degrade when Supabase / Anthropic creds are absent                        | ✅                                                 |
+| React dashboard subscribing to Supabase Realtime                                   | ⏳ Person 3                                        |
+| Doctor-queue UI + acknowledge flow                                                 | ⏳ Person 4                                        |
+| Agentverse Mailbox registration (cross-machine)                                    | ⏳ optional                                        |
 
 ### 6.3 Why these two agents first
 
@@ -187,17 +187,17 @@ Every additional agent (Bed, Lab, Pharmacy, etc.) reuses these exact primitives.
 
 The seven NEWS2 inputs split cleanly into two groups, and the system treats them differently. In the Phase 1.5 build target, **five of seven** parameters are continuously sensed; only the two genuinely human-judgment fields remain manual.
 
-| Parameter | Source | Refresh | Treatment |
-|---|---|---|---|
-| Heart rate | ECG / SpO₂ probe (continuous) | every ~10 s | **passive** — agent updates every tick |
-| SpO₂ | Pulse oximeter (continuous) | every ~10 s | **passive** |
-| Respiratory rate | Chest impedance / capnography (continuous) | every ~10 s | **passive** |
-| Systolic BP | Auto-cycling NIBP cuff | every ~5–15 min | **passive** — surfaced with `nibp_set_at` |
-| Temperature | Continuous skin probe / auto-cycling tympanic | every ~1–5 min | **passive** — surfaced with `temp_set_at` |
-| Supplemental O₂ (on/off + flow) | Nurse-set on the wall flowmeter | event-driven | **manual** — dashboard tap |
-| Consciousness (ACVPU) | Nurse assessment | per protocol (~1–4 h) | **manual** — dashboard tap |
+| Parameter                       | Source                                        | Refresh               | Treatment                                 |
+| ------------------------------- | --------------------------------------------- | --------------------- | ----------------------------------------- |
+| Heart rate                      | ECG / SpO₂ probe (continuous)                 | every ~10 s           | **passive** — agent updates every tick    |
+| SpO₂                            | Pulse oximeter (continuous)                   | every ~10 s           | **passive**                               |
+| Respiratory rate                | Chest impedance / capnography (continuous)    | every ~10 s           | **passive**                               |
+| Systolic BP                     | Auto-cycling NIBP cuff                        | every ~5–15 min       | **passive** — surfaced with `nibp_set_at` |
+| Temperature                     | Continuous skin probe / auto-cycling tympanic | every ~1–5 min        | **passive** — surfaced with `temp_set_at` |
+| Supplemental O₂ (on/off + flow) | Nurse-set on the wall flowmeter               | event-driven          | **manual** — dashboard tap                |
+| Consciousness (ACVPU)           | Nurse assessment                              | per protocol (~1–4 h) | **manual** — dashboard tap                |
 
-The two manual fields are the only places where a human still has to *put a number into the system*. Everything else is a sensor read.
+The two manual fields are the only places where a human still has to _put a number into the system_. Everything else is a sensor read.
 
 ### 6.5 Phase 1.5 — passive sensing × human-in-the-loop
 
@@ -247,15 +247,15 @@ One tap, eight seconds of stage time, the entire human-in-the-loop story.
 
 ## 7. Roadmap
 
-| Phase | Agents added | Demo unlock | Status |
-|---|---|---|---|
-| **1 — Patient Monitoring** | Patient Vitals · Floor Aggregator | Live patient grid + NEWS2 + auto doctor calls | ✅ shipped |
-| **1.5 — Passive + Human-in-the-Loop** | Staff Agent (overdue-check slice) | Preliminary NEWS2, per-field freshness, inline manual controls, ACVPU-tap demo beat | planned (see §6.5) |
-| **2 — Bed & Discharge** | Bed Agent · Discharge Agent · Facilities Agent | "Bed ready in 40 min, not 4 hours" demo beat | next |
-| **3 — Lab & Pharmacy** | Lab Agent · Pharmacy Agent | Critical-value page + auto-reorder | |
-| **4 — ER & Staff** | ER Triage Agent · Staff Agent | Full patient-journey narrative end-to-end | |
-| **5 — Command Center** | Executive dashboard, NL query, weekly Claude reports | Hospital-administrator view | |
-| **6 — Multi-hospital** | Hospital-level federation, cross-site bed transfers | Network-of-hospitals demo | stretch |
+| Phase                                 | Agents added                                         | Demo unlock                                                                         | Status             |
+| ------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------ |
+| **1 — Patient Monitoring**            | Patient Vitals · Floor Aggregator                    | Live patient grid + NEWS2 + auto doctor calls                                       | ✅ shipped         |
+| **1.5 — Passive + Human-in-the-Loop** | Staff Agent (overdue-check slice)                    | Preliminary NEWS2, per-field freshness, inline manual controls, ACVPU-tap demo beat | planned (see §6.5) |
+| **2 — Bed & Discharge**               | Bed Agent · Discharge Agent · Facilities Agent       | "Bed ready in 40 min, not 4 hours" demo beat                                        | next               |
+| **3 — Lab & Pharmacy**                | Lab Agent · Pharmacy Agent                           | Critical-value page + auto-reorder                                                  |                    |
+| **4 — ER & Staff**                    | ER Triage Agent · Staff Agent                        | Full patient-journey narrative end-to-end                                           |                    |
+| **5 — Command Center**                | Executive dashboard, NL query, weekly Claude reports | Hospital-administrator view                                                         |                    |
+| **6 — Multi-hospital**                | Hospital-level federation, cross-site bed transfers  | Network-of-hospitals demo                                                           | stretch            |
 
 ---
 
@@ -333,12 +333,12 @@ Phase 1 uses **NEWS2** — the UK Royal College of Physicians' National Early Wa
 
 Score → flag mapping:
 
-| NEWS2 aggregate | Risk band | UI flag |
-|---|---|---|
-| 0 | none | `stable` |
-| 1–4 (no single param = 3) | low | `watch` |
-| 3 in any single parameter, OR 5–6 | medium | `critical` |
-| ≥ 7 | high | `critical` |
+| NEWS2 aggregate                   | Risk band | UI flag    |
+| --------------------------------- | --------- | ---------- |
+| 0                                 | none      | `stable`   |
+| 1–4 (no single param = 3)         | low       | `watch`    |
+| 3 in any single parameter, OR 5–6 | medium    | `critical` |
+| ≥ 7                               | high      | `critical` |
 
 Per-parameter scoring tables and the `score_news2()` implementation are in `agents/thresholds.py`. They follow the published RCP table verbatim (with `<` upper-bound encoding so fractional values from the bedside monitor don't fall between bands).
 
@@ -420,16 +420,16 @@ Phases 2+ extend this schema with:
 
 Each parameter scores 0 / 1 / 2 / 3 per the RCP NEWS2 table. The implementation is in `agents/thresholds.py`.
 
-| Parameter | 3 | 2 | 1 | 0 | 1 | 2 | 3 |
-|---|---|---|---|---|---|---|---|
-| RR (breaths/min) | ≤ 8 | – | 9–11 | 12–20 | – | 21–24 | ≥ 25 |
-| SpO₂ Scale 1 | ≤ 91 | 92–93 | 94–95 | ≥ 96 | – | – | – |
-| SpO₂ Scale 2 (target 88–92, on O₂ band)¹ | ≤ 83 | 84–85 | 86–87 | 88–92 | 93–94 | 95–96 | ≥ 97 |
-| Air or O₂ | – | yes | – | air | – | – | – |
-| SBP (mmHg) | ≤ 90 | 91–100 | 101–110 | 111–219 | – | – | ≥ 220 |
-| Pulse (bpm) | ≤ 40 | – | 41–50 | 51–90 | 91–110 | 111–130 | ≥ 131 |
-| Consciousness (ACVPU) | C / V / P / U² | – | – | A | – | – | – |
-| Temp (°C) | ≤ 35.0 | ≥ 39.1 | 35.1–36.0 or 38.1–39.0 | 36.1–38.0 | – | – | – |
+| Parameter                                | 3              | 2      | 1                      | 0         | 1      | 2       | 3     |
+| ---------------------------------------- | -------------- | ------ | ---------------------- | --------- | ------ | ------- | ----- |
+| RR (breaths/min)                         | ≤ 8            | –      | 9–11                   | 12–20     | –      | 21–24   | ≥ 25  |
+| SpO₂ Scale 1                             | ≤ 91           | 92–93  | 94–95                  | ≥ 96      | –      | –       | –     |
+| SpO₂ Scale 2 (target 88–92, on O₂ band)¹ | ≤ 83           | 84–85  | 86–87                  | 88–92     | 93–94  | 95–96   | ≥ 97  |
+| Air or O₂                                | –              | yes    | –                      | air       | –      | –       | –     |
+| SBP (mmHg)                               | ≤ 90           | 91–100 | 101–110                | 111–219   | –      | –       | ≥ 220 |
+| Pulse (bpm)                              | ≤ 40           | –      | 41–50                  | 51–90     | 91–110 | 111–130 | ≥ 131 |
+| Consciousness (ACVPU)                    | C / V / P / U² | –      | –                      | A         | –      | –       | –     |
+| Temp (°C)                                | ≤ 35.0         | ≥ 39.1 | 35.1–36.0 or 38.1–39.0 | 36.1–38.0 | –      | –       | –     |
 
 ¹ Scale 2 is opt-in per room — used for hypercapnic respiratory failure (e.g. COPD).  
 ² ACVPU: **A**lert, new **C**onfusion, responsive to **V**oice / **P**ain, **U**nresponsive.
@@ -469,16 +469,16 @@ Failure modes (rate limit, bad key, network) all fall back to a deterministic st
 
 ## 13. Tech Stack Summary
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| Agent framework | Fetch.ai uAgents 0.24+ | All department agents, async messaging |
-| Agent discovery | Almanac contract / Agentverse Mailbox | Cross-machine reachability |
-| Database | Supabase (PostgreSQL) | Persistent state, schema, RLS |
-| Realtime | Supabase Realtime | WebSocket push to dashboard |
-| AI reasoning | Anthropic Claude (Sonnet) | Notes, summaries, NL query, escalations |
-| Frontend | React + Vite + Supabase JS | Nurse station + executive dashboards |
-| Analytics | Afterquery-style live SQL | Operational & executive reporting |
-| Mock data | `mock_vitals.py` scenario presets | Demo-ready vital streams |
+| Layer           | Technology                            | Purpose                                 |
+| --------------- | ------------------------------------- | --------------------------------------- |
+| Agent framework | Fetch.ai uAgents 0.24+                | All department agents, async messaging  |
+| Agent discovery | Almanac contract / Agentverse Mailbox | Cross-machine reachability              |
+| Database        | Supabase (PostgreSQL)                 | Persistent state, schema, RLS           |
+| Realtime        | Supabase Realtime                     | WebSocket push to dashboard             |
+| AI reasoning    | Anthropic Claude (Sonnet)             | Notes, summaries, NL query, escalations |
+| Frontend        | React + Vite + Supabase JS            | Nurse station + executive dashboards    |
+| Analytics       | Supabase Postgres + Claude-generated reports | Operational & executive reporting       |
+| Mock data       | `mock_vitals.py` scenario presets     | Demo-ready vital streams                |
 
 ---
 
@@ -578,14 +578,14 @@ BUREAU_PORT=8200
 
 **Goal:** Build and run all agents end-to-end with mock data.
 
-| Task | Status |
-|---|---|
-| Set up Python env, install `uagents`, scaffold project | ✅ |
-| Build `mock_vitals.py` — 5 clinical scenarios | ✅ |
-| Build `patient_agent.py` — interval polling, NEWS2, send | ✅ |
-| Build `floor_aggregator.py` — aggregation + persistence dispatch | ✅ |
-| Bureau-based mesh in one process (skipped Mailbox for now) | ✅ / ⏸ |
-| Integration support: NEWS2, doctor-queue logic, docs | ✅ |
+| Task                                                             | Status |
+| ---------------------------------------------------------------- | ------ |
+| Set up Python env, install `uagents`, scaffold project           | ✅     |
+| Build `mock_vitals.py` — 5 clinical scenarios                    | ✅     |
+| Build `patient_agent.py` — interval polling, NEWS2, send         | ✅     |
+| Build `floor_aggregator.py` — aggregation + persistence dispatch | ✅     |
+| Bureau-based mesh in one process (skipped Mailbox for now)       | ✅ / ⏸ |
+| Integration support: NEWS2, doctor-queue logic, docs             | ✅     |
 
 **Bonus shipped:** full **NEWS2 (RCP 2017)** implementation with O₂ + ACVPU per-room demo overrides.
 
@@ -593,14 +593,14 @@ BUREAU_PORT=8200
 
 **Goal:** Claude API integration + Supabase write logic inside agents.
 
-| Task | Status |
-|---|---|
-| Supabase project, paste `schema.sql`, run `seed.sql` | ⏳ user-side |
-| Build `claude_notes.py` — call, prompt, parse, cache | ✅ |
-| Build `thresholds.py` — flag logic (NEWS2 by Person 1) | ✅ |
-| Build `supabase_writer.py` — upsert + insert paths | ✅ |
-| Test full cycle: vitals → NEWS2 → Claude → Supabase | ✅ (cred-gated) |
-| Tune prompt, doctor-queue auto-open on transition | ✅ |
+| Task                                                   | Status          |
+| ------------------------------------------------------ | --------------- |
+| Supabase project, paste `schema.sql`, run `seed.sql`   | ⏳ user-side    |
+| Build `claude_notes.py` — call, prompt, parse, cache   | ✅              |
+| Build `thresholds.py` — flag logic (NEWS2 by Person 1) | ✅              |
+| Build `supabase_writer.py` — upsert + insert paths     | ✅              |
+| Test full cycle: vitals → NEWS2 → Claude → Supabase    | ✅ (cred-gated) |
+| Tune prompt, doctor-queue auto-open on transition      | ✅              |
 
 **Deliverable:** Every agent cycle results in a correct Supabase row write + AI note in the DB. ✅
 
@@ -608,42 +608,42 @@ BUREAU_PORT=8200
 
 **Goal:** React dashboard showing live patient grid with Realtime updates.
 
-| Task |
-|---|
-| Scaffold React app (`vite`), install Supabase JS |
-| `lib/supabase.js` — client + Realtime hook on `patient_current_state` |
+| Task                                                                          |
+| ----------------------------------------------------------------------------- |
+| Scaffold React app (`vite`), install Supabase JS                              |
+| `lib/supabase.js` — client + Realtime hook on `patient_current_state`         |
 | `PatientCard.jsx` — vitals, flag colour, **NEWS2 badge**, AI note, ack button |
-| `PatientGrid.jsx` — sorted by NEWS2 score desc, summary stat bar |
-| Wire Realtime: confirm live updates on Supabase row change |
-| Polish layout, edge cases (no data, loading state) |
+| `PatientGrid.jsx` — sorted by NEWS2 score desc, summary stat bar              |
+| Wire Realtime: confirm live updates on Supabase row change                    |
+| Polish layout, edge cases (no data, loading state)                            |
 
 ### Person 4 — Doctor Queue & Demo Polish ⏳ in progress
 
 **Goal:** Doctor call queue UI + end-to-end demo preparation.
 
-| Task |
-|---|
-| `DoctorQueue.jsx` — pending calls, urgency badges, status updates |
-| Realtime subscription on `doctor_calls` |
-| Acknowledge flow — button on PatientCard writes to `flags.acknowledged` |
+| Task                                                                              |
+| --------------------------------------------------------------------------------- |
+| `DoctorQueue.jsx` — pending calls, urgency badges, status updates                 |
+| Realtime subscription on `doctor_calls`                                           |
+| Acknowledge flow — button on PatientCard writes to `flags.acknowledged`           |
 | Demo script: tune `VITALWATCH_SCENARIO_*` env vars for sepsis & bradycardia beats |
-| Update `README.md` — setup + demo |
-| End-to-end rehearsal, screenshots for slides |
+| Update `README.md` — setup + demo                                                 |
+| End-to-end rehearsal, screenshots for slides                                      |
 
 ### 17.1 Phase 1.5 work split (passive + human-in-the-loop)
 
 Parallelisable across the same four people. Maps 1:1 onto the four items in §6.5.
 
-| Item | Owner | Files touched |
-|---|---|---|
-| **1. Preliminary NEWS2 score** | P1 | `agents/thresholds.py` (add `score_news2_partial()` — same scoring, only the 5 passive params, defaults `on_oxygen=False, consciousness="A"`); `agents/messages.py` (`preliminary_news2_score: int`, `preliminary_news2_risk: str`); `agents/patient_agent.py` (compute & emit alongside full score) |
-| **2a. Freshness schema** | P2 | `supabase/schema.sql` — add `nibp_set_at`, `temp_set_at`, `o2_set_at`, `acvpu_set_at` `TIMESTAMPTZ` to `patient_current_state`; mirror in `vitals_readings` if needed; bump `supabase/README.md` |
-| **2b. Freshness write-side** | P1 + P2 | `agents/supabase_writer.py` — only stamp `nibp_set_at` / `temp_set_at` when an actual fresh reading arrives (need a "value-changed" check or a generation counter from the patient agent); never overwrite `o2_set_at` / `acvpu_set_at` from the agent loop |
-| **3a. Floor-agent staff endpoint** | P1 | `agents/floor_aggregator.py` — small `aiohttp` (or uAgents built-in HTTP) handler `POST /staff/patient/{id}/manual` that upserts the supplied fields + stamps the matching `*_set_at` and lets Supabase Realtime fan it out |
-| **3b. Inline manual controls** | P3 | `dashboard/src/components/PatientCard.jsx` — 3-control strip per card: ACVPU dropdown, O₂ toggle + flow input, "Manual override" expanding BP / temp inputs; calls the new endpoint |
-| **3c. Freshness badges on UI** | P3 | `dashboard/src/components/FreshnessBadge.jsx` (new) — green / amber / red under each field driven by `*_set_at` deltas |
-| **4. Staff Agent overdue-check stub** | P1 | `agents/staff_agent.py` (new, ~80 lines) — runs in same Bureau, periodic check on `patient_current_state.acvpu_set_at` / `o2_set_at`, emits a soft `OverdueCheck` message → upserts a `due_check` field on the row → dashboard renders an "ACVPU due" pill |
-| **Demo beat wiring** | P4 | Demo script: pre-stage Maria Gonzalez at NEWS2 = 4, scripted single ACVPU=V tap, validate the auto-opened doctor call lands in the queue UI within ~1 s |
+| Item                                  | Owner   | Files touched                                                                                                                                                                                                                                                                                        |
+| ------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Preliminary NEWS2 score**        | P1      | `agents/thresholds.py` (add `score_news2_partial()` — same scoring, only the 5 passive params, defaults `on_oxygen=False, consciousness="A"`); `agents/messages.py` (`preliminary_news2_score: int`, `preliminary_news2_risk: str`); `agents/patient_agent.py` (compute & emit alongside full score) |
+| **2a. Freshness schema**              | P2      | `supabase/schema.sql` — add `nibp_set_at`, `temp_set_at`, `o2_set_at`, `acvpu_set_at` `TIMESTAMPTZ` to `patient_current_state`; mirror in `vitals_readings` if needed; bump `supabase/README.md`                                                                                                     |
+| **2b. Freshness write-side**          | P1 + P2 | `agents/supabase_writer.py` — only stamp `nibp_set_at` / `temp_set_at` when an actual fresh reading arrives (need a "value-changed" check or a generation counter from the patient agent); never overwrite `o2_set_at` / `acvpu_set_at` from the agent loop                                          |
+| **3a. Floor-agent staff endpoint**    | P1      | `agents/floor_aggregator.py` — small `aiohttp` (or uAgents built-in HTTP) handler `POST /staff/patient/{id}/manual` that upserts the supplied fields + stamps the matching `*_set_at` and lets Supabase Realtime fan it out                                                                          |
+| **3b. Inline manual controls**        | P3      | `dashboard/src/components/PatientCard.jsx` — 3-control strip per card: ACVPU dropdown, O₂ toggle + flow input, "Manual override" expanding BP / temp inputs; calls the new endpoint                                                                                                                  |
+| **3c. Freshness badges on UI**        | P3      | `dashboard/src/components/FreshnessBadge.jsx` (new) — green / amber / red under each field driven by `*_set_at` deltas                                                                                                                                                                               |
+| **4. Staff Agent overdue-check stub** | P1      | `agents/staff_agent.py` (new, ~80 lines) — runs in same Bureau, periodic check on `patient_current_state.acvpu_set_at` / `o2_set_at`, emits a soft `OverdueCheck` message → upserts a `due_check` field on the row → dashboard renders an "ACVPU due" pill                                           |
+| **Demo beat wiring**                  | P4      | Demo script: pre-stage Maria Gonzalez at NEWS2 = 4, scripted single ACVPU=V tap, validate the auto-opened doctor call lands in the queue UI within ~1 s                                                                                                                                              |
 
 **Recommended order** so each owner is unblocked: P2 ships 2a → P1 ships 1, 2b, 3a in one pass → P3 ships 3b, 3c against the new endpoint → P1 ships 4 → P4 wires the demo beat.
 
@@ -653,61 +653,62 @@ Parallelisable across the same four people. Maps 1:1 onto the four items in §6.
 
 ## 18. Integration Checkpoints
 
-| Time | Milestone | Owner |
-|---|---|---|
-| T+1:30 | Mock vitals flowing patient agent → console | P1 ✅ |
-| T+2:00 | Supabase `patient_current_state` receiving writes | P2 ✅ (cred-gated) |
-| T+2:30 | Dashboard displaying static Supabase data | P3 |
-| T+3:00 | Full chain: agent → Supabase → Realtime → dashboard live update | P1+P2+P3 |
-| T+3:30 | Critical NEWS2 → AI note → flag card on dashboard | P2+P3 |
-| T+4:00 | Doctor queue visible and reactive | P4 |
-| T+4:30 | End-to-end demo rehearsal | All |
-| T+5:00 | 🎤 Demo |
+| Time   | Milestone                                                       | Owner              |
+| ------ | --------------------------------------------------------------- | ------------------ |
+| T+1:30 | Mock vitals flowing patient agent → console                     | P1 ✅              |
+| T+2:00 | Supabase `patient_current_state` receiving writes               | P2 ✅ (cred-gated) |
+| T+2:30 | Dashboard displaying static Supabase data                       | P3                 |
+| T+3:00 | Full chain: agent → Supabase → Realtime → dashboard live update | P1+P2+P3           |
+| T+3:30 | Critical NEWS2 → AI note → flag card on dashboard               | P2+P3              |
+| T+4:00 | Doctor queue visible and reactive                               | P4                 |
+| T+4:30 | End-to-end demo rehearsal                                       | All                |
+| T+5:00 | 🎤 Demo                                                         |
 
 **Phase 1.5 add-ons** (run in parallel with Phase 1 once `patient_current_state` exists):
 
-| Time (relative) | Milestone | Owner |
-|---|---|---|
-| Δ+0:30 | Schema migration: 4 `*_set_at` columns live in Supabase | P2 |
-| Δ+1:15 | Patient agent emitting `preliminary_news2_score` + writer stamping freshness only on real updates | P1 |
-| Δ+2:00 | Floor agent `POST /staff/patient/{id}/manual` endpoint reachable from dashboard | P1 |
-| Δ+3:00 | Inline ACVPU / O₂ / override controls + freshness badges live on dashboard | P3 |
-| Δ+3:30 | ACVPU = V tap → NEWS2 jumps 4 → 7 → doctor_call row open → queue UI updates | All |
-| Δ+4:00 | Staff Agent stub raising "ACVPU due" pill | P1 |
+| Time (relative) | Milestone                                                                                         | Owner |
+| --------------- | ------------------------------------------------------------------------------------------------- | ----- |
+| Δ+0:30          | Schema migration: 4 `*_set_at` columns live in Supabase                                           | P2    |
+| Δ+1:15          | Patient agent emitting `preliminary_news2_score` + writer stamping freshness only on real updates | P1    |
+| Δ+2:00          | Floor agent `POST /staff/patient/{id}/manual` endpoint reachable from dashboard                   | P1    |
+| Δ+3:00          | Inline ACVPU / O₂ / override controls + freshness badges live on dashboard                        | P3    |
+| Δ+3:30          | ACVPU = V tap → NEWS2 jumps 4 → 7 → doctor_call row open → queue UI updates                       | All   |
+| Δ+4:00          | Staff Agent stub raising "ACVPU due" pill                                                         | P1    |
 
 ---
 
 ## 19. Phase 1 Demo Flow (5-minute script)
 
-1. Open the dashboard — 4 patients visible. Cards sorted by NEWS2: Room 305 (NEWS2=5, *critical, bradycardia*) at the top, Room 303 (NEWS2=0, *stable*) at the bottom.
-2. Trigger sepsis scenario for Room 301: `VITALWATCH_SCENARIO_301=sepsis`. Within 10 s the card flips from *watch (NEWS2=2)* to *critical (NEWS2=6)*, the AI note updates to a sepsis-recognition message, and a new urgent doctor call appears in the queue.
+1. Open the dashboard — 4 patients visible. Cards sorted by NEWS2: Room 305 (NEWS2=5, _critical, bradycardia_) at the top, Room 303 (NEWS2=0, _stable_) at the bottom.
+2. Trigger sepsis scenario for Room 301: `VITALWATCH_SCENARIO_301=sepsis`. Within 10 s the card flips from _watch (NEWS2=2)_ to _critical (NEWS2=6)_, the AI note updates to a sepsis-recognition message, and a new urgent doctor call appears in the queue.
 3. Show the Patient Agent log: **NEWS2 breakdown** explaining which parameters drove the score (`spo2=1, hr=2, rr=2, temp=1`).
 4. Show the Floor Aggregator log: **transition detected, flags + doctor_calls inserted**.
 5. Trigger bradycardia + on-oxygen for Room 305: `VITALWATCH_OXYGEN_305=1`. NEWS2 jumps from 5 (medium) → 7 (high). Card flashes high-risk.
 6. Open the Supabase table editor in another tab — `vitals_readings` is filling row by row in real time, fully audit-trailed.
 7. Click "Call Doctor" / "Acknowledge" → entries update in the queue.
-8. **(Phase 1.5 beat — if shipped)** Walk to Maria Gonzalez (Room 304), currently sitting at *watch (NEWS2 = 4)* from purely passive sensing — note the freshness badges showing BP fresh (3 m), ACVPU stale (47 m). Tap **ACVPU = V** on her card. The card flips to *critical (NEWS2 = 7)* in under a second, the freshness badge resets to "now," and a new urgent doctor call slides into the queue. *"Five of seven NEWS2 inputs are continuously sensed — the score you saw a moment ago. The two that need a human take one tap, on the same screen the nurse is already standing in front of. That's the human-in-the-loop story."*
+8. **(Phase 1.5 beat — if shipped)** Walk to Maria Gonzalez (Room 304), currently sitting at _watch (NEWS2 = 4)_ from purely passive sensing — note the freshness badges showing BP fresh (3 m), ACVPU stale (47 m). Tap **ACVPU = V** on her card. The card flips to _critical (NEWS2 = 7)_ in under a second, the freshness badge resets to "now," and a new urgent doctor call slides into the queue. _"Five of seven NEWS2 inputs are continuously sensed — the score you saw a moment ago. The two that need a human take one tap, on the same screen the nurse is already standing in front of. That's the human-in-the-loop story."_
 9. **Land the bigger story:** "This is one ward, two agent types, and NEWS2. The same architecture extends to Bed Agents, Lab Agents, Pharmacy — that's Nucleus, the autonomous hospital OS. Phase 1 proves it works on the most safety-critical layer."
 
 ---
 
 ## 20. Why This Wins
 
-| Factor | Why it matters |
-|---|---|
-| **Scale** | Touches every department — judges see the full vision, not a toy |
-| **All three sponsor stacks used deeply** | Fetch.ai for the agent mesh, Claude as the reasoning surface, Supabase + analytics for the command center |
-| **Emotionally resonant** | Every judge has been in a hospital. They've felt the chaos |
-| **Ethically clean** | Doctors still make medical decisions. Nucleus handles only operations |
-| **Real ROI numbers** | Bed misallocation alone costs U.S. hospitals an estimated $20bn / year |
-| **Architecturally proven, not just a slide** | Phase 1 ships a real, NEWS2-validated agent mesh — not a mockup |
-| **Extendable roadmap** | Each new agent reuses Phase 1 primitives; no rewrites needed |
+| Factor                                       | Why it matters                                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **Scale**                                    | Touches every department — judges see the full vision, not a toy                                          |
+| **Sponsor stacks used deeply**               | Fetch.ai for the agent mesh, Claude as the reasoning surface, Supabase for state + Realtime fan-out |
+| **Emotionally resonant**                     | Every judge has been in a hospital. They've felt the chaos                                                |
+| **Ethically clean**                          | Doctors still make medical decisions. Nucleus handles only operations                                     |
+| **Real ROI numbers**                         | Bed misallocation alone costs U.S. hospitals an estimated $20bn / year                                    |
+| **Architecturally proven, not just a slide** | Phase 1 ships a real, NEWS2-validated agent mesh — not a mockup                                           |
+| **Extendable roadmap**                       | Each new agent reuses Phase 1 primitives; no rewrites needed                                              |
 
 ---
 
 ## 21. MVP Scope vs. Stretch
 
 ### Phase 1 MVP (must ship in 5 h)
+
 - ✅ Patient agents with mock data, NEWS2 evaluation, Claude notes
 - ✅ Floor aggregator writing to Supabase
 - ⏳ Dashboard with live Realtime updates
@@ -715,6 +716,7 @@ Parallelisable across the same four people. Maps 1:1 onto the four items in §6.
 - ⏳ 2 demo scenarios polished
 
 ### Stretch goals
+
 - Trend graph per patient (last 20 readings from `vitals_readings`)
 - Multi-floor selector in dashboard
 - NEWS2 trend mini-chart on patient card
@@ -724,6 +726,7 @@ Parallelisable across the same four people. Maps 1:1 onto the four items in §6.
 - Multilingual discharge summary demo
 
 ### Phase 2+ (post-hackathon)
+
 See §7 roadmap. Same architecture, more agents.
 
 ---
