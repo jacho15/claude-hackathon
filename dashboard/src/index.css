@@ -455,7 +455,7 @@ body {
 }
 
 .ai-note-text {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--ai-text);
   line-height: 1.5;
 }

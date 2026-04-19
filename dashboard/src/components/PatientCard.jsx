@@ -181,7 +181,7 @@ export default function PatientCard({ patient, onClick, onCallDoctor }) {
         <div className="pcard-badges">
           {news2_score != null && (
             <span className={`news2-badge news2-badge--${news2_risk ?? 'none'}`}>
-              NEWS2 {news2_score}
+              Score: {news2_score}
             </span>
           )}
           <FlagBadge flag={flag} />
