@@ -45,6 +45,29 @@ SCENARIOS: dict[str, dict[str, tuple[float, float]]] = {
         "temp_c":  (37.0, 0.2),     # normal
         "rr":      (18.0, 1.0),     # normal upper
     },
+    # Phase 1.5 demo beat — Maria Gonzalez, §19 step 8.
+    # Tuned so the PRELIMINARY NEWS2 (passive params only, room-air,
+    # ACVPU=A) lands at exactly 4 → low/watch with no single param
+    # scoring 3:
+    #   HR 95          → 1 (91–110)
+    #   BP 124/78      → 0
+    #   SpO2 93.5      → 2 (92–93 band, conservative <94)
+    #   Temp 38.5 °C   → 1 (38.1–39.0)
+    #   RR 18          → 0
+    #   ───────────────────
+    #   preliminary    = 4  (low / watch flag)
+    # Flipping ACVPU = V then adds +3 → full NEWS2 = 7 → high /
+    # critical, which is the demo punchline. Sigmas are kept tight
+    # so the score doesn't drift past 4 and accidentally pre-trip
+    # the critical flag during the walk-up.
+    "demo_watch": {
+        "hr":      (95.0, 1.5),
+        "bp_sys":  (124.0, 2.5),
+        "bp_dia":  (78.0, 2.0),
+        "spo2":    (93.5, 0.3),
+        "temp_c":  (38.5, 0.15),
+        "rr":      (18.0, 0.8),
+    },
     # septic shock onset — HR up, BP up early then crashes,
     # temp spiking, RR up
     "sepsis": {
@@ -147,8 +170,14 @@ DEMO_ROSTER: list[dict[str, str]] = [
         "patient_id": "aaaaaaaa-0000-0000-0000-000000000001",
         "room": "301",
         "full_name": "Maria Gonzalez",
-        # Person 4 flips this to "sepsis" mid-demo.
-        "scenario": "watch",
+        # Pinned to baseline so Maria stays stable for the duration
+        # of the demo. The earlier `demo_watch` preset (Phase 1.5
+        # §19 step 8) put her at preliminary NEWS2 = 4 with an
+        # ACVPU=V tap escalating her to critical — keep that recipe
+        # in SCENARIOS for future demos, but don't drive her with it
+        # by default. Env override `VITALWATCH_SCENARIO_301=...` is
+        # still respected via roster_from_env().
+        "scenario": "baseline",
     },
     {
         "patient_id": "aaaaaaaa-0000-0000-0000-000000000002",

@@ -9,6 +9,14 @@
 -- ============================================================
 
 -- Drop in dependency order so re-runs are clean.
+DROP TABLE IF EXISTS room_status_history  CASCADE;
+DROP TABLE IF EXISTS cleaning_jobs        CASCADE;
+DROP TABLE IF EXISTS transport_requests   CASCADE;
+DROP TABLE IF EXISTS discharge_summaries  CASCADE;
+DROP TABLE IF EXISTS discharge_workflows  CASCADE;
+DROP TABLE IF EXISTS transfer_requests    CASCADE;
+DROP TABLE IF EXISTS bed_history          CASCADE;
+DROP TABLE IF EXISTS beds                 CASCADE;
 DROP TABLE IF EXISTS doctor_calls         CASCADE;
 DROP TABLE IF EXISTS flags                CASCADE;
 DROP TABLE IF EXISTS vitals_readings      CASCADE;
@@ -84,7 +92,28 @@ CREATE TABLE patient_current_state (
                 CHECK (consciousness IN ('A','C','V','P','U')),
   spo2_scale    SMALLINT DEFAULT 1
                 CHECK (spo2_scale IN (1, 2)),
+  -- Phase 1.5 preliminary NEWS2: same calculation as news2_score
+  -- but with on_oxygen=FALSE and consciousness='A' forced. Surfaces
+  -- the score we can derive from sensors alone, before any nurse-
+  -- supplied manual data has been entered or has gone stale.
+  preliminary_news2_score INTEGER DEFAULT 0,
+  preliminary_news2_risk  TEXT    DEFAULT 'none'
+                CHECK (preliminary_news2_risk IN ('none','low','medium','high')),
+  -- Phase 1.5 per-field freshness. Stamped only when an actual
+  -- fresh value lands (writer skips if the value is unchanged), so
+  -- a stalled cuff or a removed probe surfaces as stale, not as
+  -- silently old data. NULL = never set.
+  --   nibp_set_at  / temp_set_at  -> stamped by the agent loop
+  --   o2_set_at    / acvpu_set_at -> stamped by the staff endpoint
+  nibp_set_at   TIMESTAMPTZ,
+  temp_set_at   TIMESTAMPTZ,
+  o2_set_at     TIMESTAMPTZ,
+  acvpu_set_at  TIMESTAMPTZ,
   -- ----------------------------------------------------------
+  -- Phase 2: surfaces the discharge workflow stage on the patient
+  -- card. NULL = no workflow in flight. Sticky like the manual
+  -- fields above; only the discharge agent writes it.
+  discharge_status TEXT,
   scenario      TEXT,           -- mock-data scenario tag (debug-only)
   last_updated  TIMESTAMPTZ DEFAULT NOW()
 );
@@ -164,6 +193,99 @@ CREATE TABLE staff (
 );
 
 -- ============================================================
+-- Phase 2: Bed, Discharge, Facilities
+-- ============================================================
+
+CREATE TABLE beds (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_number          TEXT UNIQUE NOT NULL,
+  ward                 TEXT NOT NULL,
+  status               TEXT NOT NULL DEFAULT 'occupied'
+                       CHECK (status IN ('occupied','clinically_clear',
+                                         'cleaning','ready','reserved')),
+  occupant_patient_id  UUID REFERENCES patients(id) ON DELETE SET NULL,
+  reserved_for         TEXT,
+  cleaning_eta         TIMESTAMPTZ,
+  ready_at             TIMESTAMPTZ,
+  last_change          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE bed_history (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  bed_id      UUID REFERENCES beds(id) ON DELETE CASCADE,
+  status      TEXT NOT NULL,
+  actor       TEXT,
+  at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE transfer_requests (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ward          TEXT NOT NULL,
+  urgency       TEXT NOT NULL DEFAULT 'urgent'
+                CHECK (urgency IN ('routine','urgent','emergent')),
+  reason        TEXT,
+  status        TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending','matched','waiting_cleanup',
+                                  'ready','fulfilled','cancelled')),
+  target_room   TEXT,
+  released_by_patient_id UUID REFERENCES patients(id) ON DELETE SET NULL,
+  eta           TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  fulfilled_at  TIMESTAMPTZ
+);
+
+CREATE TABLE discharge_workflows (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id   UUID REFERENCES patients(id) ON DELETE CASCADE,
+  requested_by TEXT NOT NULL,
+  language     TEXT NOT NULL DEFAULT 'es',
+  status       TEXT NOT NULL DEFAULT 'initiated'
+               CHECK (status IN ('initiated','summary_drafted',
+                                 'transport_booked','room_released',
+                                 'completed','cancelled')),
+  triggered_by_request_id UUID REFERENCES transfer_requests(id) ON DELETE SET NULL,
+  started_at   TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE discharge_summaries (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workflow_id  UUID REFERENCES discharge_workflows(id) ON DELETE CASCADE,
+  language     TEXT NOT NULL,
+  content      TEXT NOT NULL,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE transport_requests (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workflow_id  UUID REFERENCES discharge_workflows(id) ON DELETE CASCADE,
+  mode         TEXT NOT NULL DEFAULT 'wheelchair',
+  eta          TIMESTAMPTZ,
+  status       TEXT NOT NULL DEFAULT 'booked'
+               CHECK (status IN ('booked','en_route','completed','cancelled')),
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE cleaning_jobs (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_number   TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'queued'
+                CHECK (status IN ('queued','in_progress','done','cancelled')),
+  crew          TEXT,
+  requested_at  TIMESTAMPTZ DEFAULT NOW(),
+  eta           TIMESTAMPTZ,
+  completed_at  TIMESTAMPTZ
+);
+
+CREATE TABLE room_status_history (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_number  TEXT NOT NULL,
+  status       TEXT NOT NULL,
+  actor        TEXT,
+  at           TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
 -- INDEXES
 -- ============================================================
 
@@ -182,10 +304,21 @@ CREATE INDEX idx_current_state_flag
 CREATE INDEX idx_current_state_news2
   ON patient_current_state (news2_score DESC);
 
+CREATE INDEX idx_beds_status         ON beds (status);
+CREATE INDEX idx_beds_ward_status    ON beds (ward, status);
+CREATE INDEX idx_bed_history_at      ON bed_history (at DESC);
+CREATE INDEX idx_transfer_status     ON transfer_requests (status, created_at DESC);
+CREATE INDEX idx_discharge_status    ON discharge_workflows (status, started_at DESC);
+CREATE INDEX idx_discharge_patient   ON discharge_workflows (patient_id);
+CREATE INDEX idx_summaries_workflow  ON discharge_summaries (workflow_id);
+CREATE INDEX idx_cleaning_status     ON cleaning_jobs (status, requested_at DESC);
+
 -- ============================================================
 -- REALTIME — enable on the live tables only.
 -- The dashboard subscribes to these.
 -- ============================================================
 
 ALTER PUBLICATION supabase_realtime
-  ADD TABLE patient_current_state, flags, doctor_calls;
+  ADD TABLE patient_current_state, flags, doctor_calls,
+            beds, discharge_workflows, cleaning_jobs,
+            transfer_requests, discharge_summaries;
