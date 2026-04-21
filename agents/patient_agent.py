@@ -30,7 +30,7 @@ from uagents import Agent, Context
 
 from .messages import VitalsAck, VitalsUpdate
 from .mock_vitals import DEMO_ROSTER, VitalsStream
-from .thresholds import score_news2
+from .thresholds import score_news2, score_news2_partial
 
 load_dotenv()
 
@@ -152,6 +152,14 @@ def build_patient_agent(
             consciousness=consciousness,  # type: ignore[arg-type]
             spo2_scale=spo2_scale,  # type: ignore[arg-type]
         )
+        # Phase 1.5: same vitals scored under "passive only"
+        # assumptions (room air, ACVPU=A). The floor uses this as
+        # the baseline reading when the matching manual fields are
+        # stale or absent.
+        partial = score_news2_partial(
+            vitals,
+            spo2_scale=spo2_scale,  # type: ignore[arg-type]
+        )
         note = _maybe_call_claude(
             vitals,
             result.flag,
@@ -185,6 +193,8 @@ def build_patient_agent(
                 on_oxygen=on_oxygen,
                 consciousness=consciousness,
                 spo2_scale=spo2_scale,
+                preliminary_news2_score=partial.score,
+                preliminary_news2_risk=partial.risk,
             ),
         )
 

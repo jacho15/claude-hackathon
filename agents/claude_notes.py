@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from typing import Mapping, Optional
 
 DEFAULT_MODEL = os.environ.get(
-    "ANTHROPIC_MODEL", "claude-sonnet-4-20250514"
+    "ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"
 )
 REFRESH_SECONDS = float(os.environ.get("CLAUDE_REFRESH_SECONDS", "60"))
 

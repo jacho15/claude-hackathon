@@ -215,6 +215,45 @@ def score_news2(
     )
 
 
+# --- Phase 1.5: passive-only NEWS2 -------------------------------------------
+# `score_news2_partial` is the exact same NEWS2 calculation but
+# fixed to "what we can know from sensors alone" — room-air,
+# ACVPU=A. Both unmeasurable inputs score 0, so this is the
+# best-case reading of the 5 passively-sensed parameters
+# (HR, SpO2, RR, BP, temp).
+#
+# The patient agent emits this alongside the full score every
+# tick. The dashboard surfaces it as "preliminary NEWS2" whenever
+# the matching manual fields (o2_set_at / acvpu_set_at) are
+# missing or stale — so the floor is never blind, and it's
+# visually obvious which reading is sensor-grounded vs which is
+# nurse-confirmed.
+#
+# `spo2_scale` is kept as a kwarg because it's a per-room patient
+# property (hypercapnic respiratory failure), not a real-time
+# nurse decision; safe to thread through.
+
+
+def score_news2_partial(
+    v: Vitals,
+    *,
+    spo2_scale: SpO2Scale = 1,
+) -> News2Result:
+    """
+    Phase 1.5 preliminary NEWS2 — passive parameters only.
+
+    Identical to ``score_news2`` with ``on_oxygen=False`` and
+    ``consciousness="A"`` forced. Returns the same ``News2Result``
+    so callers can use both interchangeably.
+    """
+    return score_news2(
+        v,
+        on_oxygen=False,
+        consciousness="A",
+        spo2_scale=spo2_scale,
+    )
+
+
 # --- backward-compatible facade ---------------------------------------------
 # The rest of the codebase (patient_agent, floor_aggregator, the dashboard's
 # colour scheme) was written against `evaluate_flag()` / `explain_flag()`.
