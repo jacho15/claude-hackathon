@@ -19,6 +19,27 @@ In the Supabase **SQL Editor**:
 `schema.sql` is destructive (drops + recreates) — safe to re-run
 to reset the demo state.
 
+> **Phase 1.5 note.** `schema.sql` already includes the Phase 1.5
+> additions on `patient_current_state`:
+>
+> - per-field freshness — `nibp_set_at`, `temp_set_at`,
+>   `o2_set_at`, `acvpu_set_at`
+> - preliminary (passive-only) NEWS2 — `preliminary_news2_score`,
+>   `preliminary_news2_risk`
+>
+> If you stood up Supabase before Phase 1.5, run these two
+> idempotent migrations instead — they `ADD COLUMN IF NOT EXISTS`
+> and won't touch your existing rows:
+>
+> 1. `supabase/migration_phase1_5_freshness.sql`
+> 2. `supabase/migration_phase1_5_preliminary_news2.sql`
+>
+> **Pre-demo.** Run `supabase/demo_phase_1_5_stage.sql` right
+> before the §19 step-8 beat to reset Maria Gonzalez to:
+> preliminary NEWS2 = 4 (low / watch), BP fresh (3 m), Temp
+> fresh (4 m), ACVPU **stale (47 m)**. Idempotent — re-runnable
+> as many times as you like during dry-runs.
+
 After this you should see in Table Editor:
 - `hospitals` (1 row), `floors` (1 row), `patients` (4 rows)
 - `patient_current_state` (4 rows, all marked "Awaiting first

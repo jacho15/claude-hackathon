@@ -212,9 +212,27 @@ def persist_update(state: dict[str, Any]) -> None:
         "on_oxygen":    bool(state.get("on_oxygen", False)),
         "consciousness": state.get("consciousness", "A"),
         "spo2_scale":   int(state.get("spo2_scale", 1)),
+        # Phase 1.5: passive-only NEWS2. Defaults to 0/"none" so a
+        # row missing these fields (older agents, partial state)
+        # round-trips cleanly through the upsert.
+        "preliminary_news2_score": state.get("preliminary_news2_score", 0),
+        "preliminary_news2_risk":  state.get("preliminary_news2_risk", "none"),
         "scenario":     state.get("scenario"),
         "last_updated": now,
     }
+    # Phase 1.5: only stamp *_set_at when the caller explicitly
+    # provides them (i.e. via the staff endpoint). Omitting these
+    # keys keeps the existing values intact in the upsert — Postgres
+    # only updates columns named in the INSERT body.
+    for key in ("nibp_set_at", "temp_set_at",
+                "o2_set_at", "acvpu_set_at"):
+        if state.get(key) is not None:
+            state_row[key] = state[key]
+    # Phase 2: discharge_status is conditionally upserted the same
+    # way. Pass an explicit None to clear the badge; omit the key
+    # entirely to leave the DB value intact.
+    if "discharge_status" in state:
+        state_row["discharge_status"] = state["discharge_status"]
     try:
         client.table("patient_current_state").upsert(state_row).execute()
     except Exception as exc:
@@ -287,6 +305,286 @@ _FLAG_RANK = {"stable": 0, "watch": 1, "critical": 2}
 def _is_escalation(prev: str, current: str) -> bool:
     """True iff the patient moved to a strictly worse flag."""
     return _FLAG_RANK.get(current, 0) > _FLAG_RANK.get(prev, 0)
+
+
+# ===========================================================================
+# Phase 2: Bed / Discharge / Facilities writers.
+#
+# Each function follows the same conditional-upsert pattern as
+# `persist_update`: only keys actually present in the input dict are
+# included in the row body, so callers can update one field without
+# clobbering others. All three are idempotent on `id` / unique key.
+# ===========================================================================
+
+
+def _audit_insert(table: str, row: dict[str, Any]) -> None:
+    """Best-effort append-only insert into an audit table. Failures
+    are warnings, never exceptions — the audit trail is nice-to-have,
+    the live state row is the source of truth."""
+    client = _get_client()
+    if client is None:
+        return
+    try:
+        client.table(table).insert(row).execute()
+    except Exception as exc:
+        logger.warning("audit insert into %s failed: %s", table, exc)
+
+
+def persist_bed_update(state: dict[str, Any]) -> None:
+    """
+    Upsert a row in `beds`. ``state`` MUST include ``room_number``
+    (the unique key the bed agent operates on). Optional keys —
+    only those present are written, mirroring the manual-fields
+    pattern in persist_update so a partial status flip doesn't
+    erase ward/occupant information held elsewhere.
+
+    On a status change, also append to `bed_history`.
+    """
+    client = _get_client()
+    if client is None:
+        return
+
+    if "room_number" not in state:
+        logger.warning("persist_bed_update missing room_number: %r", state)
+        return
+
+    row: dict[str, Any] = {"room_number": state["room_number"]}
+    for key in ("ward", "status", "occupant_patient_id",
+                "reserved_for", "cleaning_eta", "ready_at"):
+        if key in state:
+            row[key] = state[key]
+    row["last_change"] = state.get("last_change") or datetime.now(timezone.utc).isoformat()
+
+    try:
+        # on_conflict drives the upsert via the UNIQUE constraint
+        # on room_number; without this the client tries to upsert
+        # by primary key (id) which we don't always have on hand.
+        res = (client.table("beds")
+                     .upsert(row, on_conflict="room_number")
+                     .execute())
+    except Exception as exc:
+        logger.warning("upsert beds (room=%s) failed: %s",
+                       state["room_number"], exc)
+        return
+
+    if "status" in state:
+        bed_id = None
+        try:
+            if res.data:
+                bed_id = res.data[0].get("id")
+        except Exception:
+            pass
+        if bed_id is None:
+            try:
+                lookup = (client.table("beds")
+                                .select("id")
+                                .eq("room_number", state["room_number"])
+                                .single()
+                                .execute())
+                bed_id = (lookup.data or {}).get("id")
+            except Exception:
+                bed_id = None
+        if bed_id is not None:
+            _audit_insert("bed_history", {
+                "bed_id": bed_id,
+                "status": state["status"],
+                "actor":  state.get("actor", "bed_agent"),
+            })
+        _audit_insert("room_status_history", {
+            "room_number": state["room_number"],
+            "status":      state["status"],
+            "actor":       state.get("actor", "bed_agent"),
+        })
+
+
+def persist_transfer_request(state: dict[str, Any]) -> None:
+    """Upsert a transfer request keyed by `id` (request_id)."""
+    client = _get_client()
+    if client is None:
+        return
+
+    if "id" not in state:
+        logger.warning("persist_transfer_request missing id: %r", state)
+        return
+
+    row: dict[str, Any] = {"id": state["id"]}
+    for key in ("ward", "urgency", "reason", "status",
+                "target_room", "released_by_patient_id",
+                "eta", "created_at", "fulfilled_at"):
+        if key in state:
+            row[key] = state[key]
+    try:
+        client.table("transfer_requests").upsert(row).execute()
+    except Exception as exc:
+        logger.warning("upsert transfer_requests (id=%s) failed: %s",
+                       state["id"], exc)
+
+
+def persist_workflow_update(state: dict[str, Any]) -> None:
+    """Upsert a discharge workflow keyed by `id`."""
+    client = _get_client()
+    if client is None:
+        return
+
+    if "id" not in state:
+        logger.warning("persist_workflow_update missing id: %r", state)
+        return
+
+    row: dict[str, Any] = {"id": state["id"]}
+    for key in ("patient_id", "requested_by", "language", "status",
+                "triggered_by_request_id",
+                "started_at", "completed_at"):
+        if key in state:
+            row[key] = state[key]
+    try:
+        client.table("discharge_workflows").upsert(row).execute()
+    except Exception as exc:
+        logger.warning("upsert discharge_workflows (id=%s) failed: %s",
+                       state["id"], exc)
+
+
+def persist_discharge_summary(workflow_id: str, language: str,
+                              content: str) -> None:
+    """Insert a discharge summary row — append-only, two per
+    workflow (one EN, one in the requested language)."""
+    client = _get_client()
+    if client is None:
+        return
+    try:
+        client.table("discharge_summaries").insert({
+            "workflow_id": workflow_id,
+            "language":    language,
+            "content":     content,
+        }).execute()
+    except Exception as exc:
+        logger.warning("insert discharge_summaries failed (wf=%s, lang=%s): %s",
+                       workflow_id, language, exc)
+
+
+def persist_transport_request(state: dict[str, Any]) -> None:
+    """Upsert a transport row keyed by `id`."""
+    client = _get_client()
+    if client is None:
+        return
+
+    if "id" not in state:
+        logger.warning("persist_transport_request missing id: %r", state)
+        return
+
+    row: dict[str, Any] = {"id": state["id"]}
+    for key in ("workflow_id", "mode", "eta", "status"):
+        if key in state:
+            row[key] = state[key]
+    try:
+        client.table("transport_requests").upsert(row).execute()
+    except Exception as exc:
+        logger.warning("upsert transport_requests (id=%s) failed: %s",
+                       state["id"], exc)
+
+
+def persist_cleaning_update(state: dict[str, Any]) -> None:
+    """Upsert a cleaning_jobs row keyed by `id`."""
+    client = _get_client()
+    if client is None:
+        return
+
+    if "id" not in state:
+        logger.warning("persist_cleaning_update missing id: %r", state)
+        return
+
+    row: dict[str, Any] = {"id": state["id"]}
+    for key in ("room_number", "status", "crew",
+                "requested_at", "eta", "completed_at"):
+        if key in state:
+            row[key] = state[key]
+    try:
+        client.table("cleaning_jobs").upsert(row).execute()
+    except Exception as exc:
+        logger.warning("upsert cleaning_jobs (id=%s) failed: %s",
+                       state["id"], exc)
+
+
+def fetch_clinically_clear_patient(ward: Optional[str] = None) -> Optional[dict[str, Any]]:
+    """Return one bed (with patient info) currently flagged
+    `clinically_clear`, optionally filtered by ward. Used by the
+    Discharge Agent to pick a discharge target. Returns None if
+    Supabase is unavailable or no candidate exists."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        query = (client.table("beds")
+                       .select("id, room_number, ward, occupant_patient_id, status")
+                       .eq("status", "clinically_clear"))
+        if ward:
+            query = query.eq("ward", ward)
+        res = query.limit(1).execute()
+        if not res.data:
+            return None
+        bed = res.data[0]
+        if bed.get("occupant_patient_id"):
+            try:
+                p = (client.table("patients")
+                           .select("id, full_name, room_number, primary_dx")
+                           .eq("id", bed["occupant_patient_id"])
+                           .single()
+                           .execute())
+                if p.data:
+                    bed["patient"] = p.data
+            except Exception:
+                pass
+        return bed
+    except Exception as exc:
+        logger.warning("fetch_clinically_clear_patient failed: %s", exc)
+        return None
+
+
+def fetch_bed_by_room(room_number: str) -> Optional[dict[str, Any]]:
+    """One-shot bed lookup. Used by the Bed Agent on boot to seed
+    its in-memory inventory and on demand to recheck an unknown room."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        res = (client.table("beds")
+                     .select("*")
+                     .eq("room_number", room_number)
+                     .single()
+                     .execute())
+        return res.data
+    except Exception as exc:
+        logger.warning("fetch_bed_by_room (%s) failed: %s", room_number, exc)
+        return None
+
+
+def fetch_all_beds() -> list[dict[str, Any]]:
+    """Return every bed row. Used by the Bed Agent on boot."""
+    client = _get_client()
+    if client is None:
+        return []
+    try:
+        res = client.table("beds").select("*").execute()
+        return list(res.data or [])
+    except Exception as exc:
+        logger.warning("fetch_all_beds failed: %s", exc)
+        return []
+
+
+def update_patient_discharge_status(patient_id: str, stage: Optional[str]) -> None:
+    """Single-field upsert for patient_current_state.discharge_status.
+    Phase 2 sticky field — passes through the existing upsert path
+    so Realtime fires once and the PatientCard re-renders."""
+    client = _get_client()
+    if client is None:
+        return
+    try:
+        client.table("patient_current_state").upsert({
+            "patient_id":       patient_id,
+            "discharge_status": stage,
+        }).execute()
+    except Exception as exc:
+        logger.warning("update_patient_discharge_status (%s) failed: %s",
+                       patient_id, exc)
 
 
 def _flag_message(state: dict[str, Any], prev: Optional[str]) -> str:

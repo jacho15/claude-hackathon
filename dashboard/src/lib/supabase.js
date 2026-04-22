@@ -7,6 +7,23 @@ export const supabase = supabaseUrl
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null
 
+const STAFF_ENDPOINT_URL =
+  import.meta.env.VITE_STAFF_ENDPOINT_URL ||
+  'http://127.0.0.1:8101/staff/patient/manual'
+
+const BED_ENDPOINT_URL =
+  import.meta.env.VITE_BED_ENDPOINT_URL ||
+  'http://127.0.0.1:8102/bed/reserve'
+
+const DISCHARGE_ENDPOINT_URL =
+  import.meta.env.VITE_DISCHARGE_ENDPOINT_URL ||
+  'http://127.0.0.1:8103/discharge/start'
+
+export function getNurseName() {
+  if (typeof window === 'undefined') return 'Nurse'
+  return window.localStorage?.getItem('nurseName') || 'Nurse'
+}
+
 export async function fetchPatients() {
   if (!supabase) return []
   const { data, error } = await supabase
@@ -94,14 +111,157 @@ export async function callDoctor({ patientId, doctorName, specialty, reason, urg
 }
 
 /**
- * Close the full escalation loop for a patient.
+ * POST a manual vital update to the floor-aggregator's staff endpoint (B3).
+ * Pass only the fields the nurse touched; everything else is preserved.
  *
- * 1. Mark any open `flags` rows resolved (so the Flag feed stops showing them).
- * 2. Close any still-open `doctor_calls` rows (status in pending/notified).
- *    Using 'completed' since the schema's CHECK constraint doesn't include
- *    'acknowledged'. Side effect: the nurse-station queue auto-clears via the
- *    existing realtime sub because fetchDoctorCalls() filters to pending+notified.
+ * Accepted fields: acvpu, on_oxygen, spo2_scale, bp_sys, bp_dia, temp_c, o2_flow_rate.
+ * Throws on validation / network errors so callers can roll back optimistic UI.
  */
+export async function setManualField({ patientId, ...fields }) {
+  if (!patientId) throw new Error('patientId required')
+  const body = { patient_id: patientId, set_by: getNurseName(), ...fields }
+  const res = await fetch(STAFF_ENDPOINT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let detail = ''
+    try { detail = (await res.json())?.error ?? '' } catch { /* ignore */ }
+    throw new Error(`staff endpoint ${res.status}: ${detail || res.statusText}`)
+  }
+  return res.json()
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Bed Board + Discharge Drawer data access.
+// ---------------------------------------------------------------------------
+
+export async function fetchBeds() {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('beds')
+    .select('*, patients (id, full_name, room_number, primary_dx)')
+    .order('room_number', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+export function subscribeToBeds(onUpdate) {
+  if (!supabase) return () => {}
+  const channel = supabase
+    .channel('beds_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'beds' }, async () => {
+      onUpdate(await fetchBeds())
+    })
+    .subscribe()
+  return () => supabase.removeChannel(channel)
+}
+
+export async function fetchDischargeWorkflows() {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('discharge_workflows')
+    .select('*, patients (full_name, room_number, primary_dx)')
+    .order('started_at', { ascending: false })
+    .limit(20)
+  if (error) throw error
+  return data ?? []
+}
+
+export function subscribeToWorkflows(onUpdate) {
+  if (!supabase) return () => {}
+  const channel = supabase
+    .channel('discharge_workflows_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'discharge_workflows' }, async () => {
+      onUpdate(await fetchDischargeWorkflows())
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'discharge_summaries' }, async () => {
+      // A new summary doesn't change the workflow row, but the
+      // drawer UI keys off summaries — re-fetch keeps it fresh.
+      onUpdate(await fetchDischargeWorkflows())
+    })
+    .subscribe()
+  return () => supabase.removeChannel(channel)
+}
+
+export async function fetchDischargeSummaries(workflowId) {
+  if (!supabase || !workflowId) return []
+  const { data, error } = await supabase
+    .from('discharge_summaries')
+    .select('*')
+    .eq('workflow_id', workflowId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchTransferRequests() {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('transfer_requests')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20)
+  if (error) throw error
+  return data ?? []
+}
+
+export function subscribeToTransferRequests(onUpdate) {
+  if (!supabase) return () => {}
+  const channel = supabase
+    .channel('transfer_requests_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'transfer_requests' }, async () => {
+      onUpdate(await fetchTransferRequests())
+    })
+    .subscribe()
+  return () => supabase.removeChannel(channel)
+}
+
+/**
+ * POST a bed reservation request to the bed agent's HTTP endpoint.
+ * Returns { request_id, status } so the caller can track the
+ * resulting transfer_request row.
+ */
+export async function reserveBed({ ward, urgency = 'urgent', reason, requestedBy = 'dashboard' } = {}) {
+  if (!ward) throw new Error('ward required')
+  const res = await fetch(BED_ENDPOINT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ward, urgency, reason, requested_by: requestedBy }),
+  })
+  if (!res.ok) {
+    let detail = ''
+    try { detail = (await res.json())?.error ?? '' } catch { /* ignore */ }
+    throw new Error(`bed endpoint ${res.status}: ${detail || res.statusText}`)
+  }
+  return res.json()
+}
+
+/**
+ * POST a manual discharge start to the discharge agent.
+ * Used for nurse-initiated discharges, independent of bed pressure.
+ */
+export async function startDischarge({ patientId, language = 'es', requestedBy } = {}) {
+  if (!patientId) throw new Error('patientId required')
+  const body = {
+    patient_id: patientId,
+    language,
+    requested_by: requestedBy ?? getNurseName(),
+  }
+  const res = await fetch(DISCHARGE_ENDPOINT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let detail = ''
+    try { detail = (await res.json())?.error ?? '' } catch { /* ignore */ }
+    throw new Error(`discharge endpoint ${res.status}: ${detail || res.statusText}`)
+  }
+  return res.json()
+}
+
 export async function acknowledgeFlag(patientId) {
   if (!supabase) return
   const nowIso = new Date().toISOString()
